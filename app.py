@@ -409,7 +409,7 @@ with st.sidebar:
     if llm_provider == "Groq (Cloud Fast)":
         groq_api_key = st.text_input("Groq API Key", type="password", value="")
         st.session_state['groq_api_key'] = groq_api_key
-        llm_model = st.selectbox("Groq Model", ["llama3-8b-8192", "llama3-70b-8192", "mixtral-8x7b-32768", "gemma-7b-it"], index=0)
+        llm_model = st.selectbox("Groq Model", ["llama-3.1-8b-instant", "llama-3.3-70b-versatile", "qwen/qwen3-32b"], index=0)
         ollama_url = ""
     else:
         ollama_url = st.text_input("Ollama URL", value="http://localhost:11434", help="Default: http://localhost:11434")
