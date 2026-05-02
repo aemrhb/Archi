@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HOAI Contract Auditor | LLM-First Reasoning Engine</title>
+    <link rel="stylesheet" href="hoai_styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <header>
+            <div class="logo">
+                <span class="icon">⚖️</span>
+                <h1>HOAI Auditor</h1>
+            </div>
+            <div class="header-actions">
+                <select id="modelSelect" class="model-select glass">
+                    <option value="mistral">Loading models...</option>
+                </select>
+                <div class="status-badge" id="appStatus">Ready</div>
+            </div>
+        </header>
+
+        <main>
+            <section class="upload-zone">
+                <div class="card glass">
+                    <h3>1. Ingestion</h3>
+                    <p class="subtitle">Upload the legal foundations and the specific deal.</p>
+                    <div class="drop-grids">
+                        <div class="drop-area" id="hoaiDrop">
+                            <input type="file" id="hoaiFile" accept=".pdf" hidden>
+                            <div class="content">
+                                <span class="icon">📜</span>
+                                <p>HOAI Reference (PDF)</p>
+                            </div>
+                        </div>
+                        <div class="drop-area" id="contractDrop">
+                            <input type="file" id="contractFile" accept=".pdf" hidden>
+                            <div class="content">
+                                <span class="icon">💼</span>
+                                <p>Project Contract (PDF)</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card glass reasoning-card">
+                    <h3>Reasoning Log</h3>
+                    <div class="log-container" id="reasoningLog">
+                        <div class="log-entry system">System initialized. Waiting for uploads...</div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="extraction-view hidden" id="extractionView">
+                <div class="card glass full-width">
+                    <h3>2. Semantic Extraction</h3>
+                    <div class="extraction-content">
+                        <div class="extracted-data" id="extractedData">
+                            <!-- Populated by JS -->
+                        </div>
+                        <div class="confirmation-actions">
+                            <button class="btn secondary" id="editDataBtn">Edit Selection</button>
+                            <button class="btn primary" id="confirmDataBtn">Confirm & Audit HOAI</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="report-view hidden" id="reportView">
+                <div class="card glass report-card">
+                    <div class="report-header">
+                        <h3>3. Discrepancy Report</h3>
+                        <span class="badge" id="reportBadge">Audit Complete</span>
+                    </div>
+                    <div class="report-body" id="reportBody">
+                        <!-- Markdown-like content rendered here -->
+                    </div>
+                    <div class="report-footer">
+                        <button class="btn primary" onclick="window.print()">Download PDF Report</button>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div class="modal hidden" id="editModal">
+        <div class="modal-content glass">
+            <h3>Technical Difficulty Adjustment</h3>
+            <p>Did I miss any technical difficulty that isn't in the text?</p>
+            <textarea id="difficultyInput" placeholder="e.g., Underground tunnel works, extreme slope..."></textarea>
+            <div class="modal-actions">
+                <button class="btn secondary" id="closeModal">Cancel</button>
+                <button class="btn primary" id="saveDifficulty">Save & Update</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Chat Interface -->
+    <div id="chatWidget" class="chat-widget glass">
+        <div class="chat-header">
+            <span class="icon">💬</span>
+            <h4>HOAI Assistant</h4>
+            <button id="toggleChat" class="icon-btn">×</button>
+        </div>
+        <div id="chatMessages" class="chat-messages">
+            <div class="message assistant">Hello! I'm your HOAI assistant. How can I help you with your contract today?</div>
+        </div>
+        <div class="chat-input-area">
+            <input type="text" id="chatInput" placeholder="Ask about HOAI or your contract...">
+            <button id="sendChatBtn" class="btn primary">Send</button>
+        </div>
+    </div>
+
+    <script src="hoai_app.js"></script>
+</body>
+</html>

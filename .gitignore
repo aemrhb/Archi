@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+hoai_db/
+nbauo_db/
+test_bim_db_tmp/
+.venv/
+venv/
+env/
+.env

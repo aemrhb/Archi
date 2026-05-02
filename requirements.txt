@@ -1,0 +1,10 @@
+streamlit
+ifcopenshell
+pandas
+chromadb
+pdfplumber
+fpdf
+fastapi
+uvicorn
+pydantic
+requests
