@@ -147,11 +147,40 @@ def extract_text_from_pdf(pdf_file, keyword_prioritize=True, deep_scan=False):
         return None
 
 def call_local_llm(prompt, model_name="llama3", base_url="http://localhost:11434"):
-    """Call local LLM (Ollama) to process the prompt"""
+    """Call local LLM (Ollama) or Cloud (Groq) to process the prompt"""
+    import requests
+    
+    provider = st.session_state.get('llm_provider', 'Ollama (Local)')
+    
+    if provider == "Groq (Cloud Fast)":
+        api_key = st.session_state.get('groq_api_key', '')
+        if not api_key:
+            st.error("Groq API Key is missing!")
+            return None
+            
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+        data = {
+            "model": model_name,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.1
+        }
+        try:
+            response = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=data, timeout=60)
+            if response.status_code == 200:
+                return response.json()['choices'][0]['message']['content']
+            else:
+                st.error(f"Groq API Error: {response.text}")
+                return None
+        except Exception as e:
+            st.error(f"Error calling Groq API: {e}")
+            return None
+            
+    # --- Otherwise, Ollama logic ---
     if not OLLAMA_AVAILABLE:
         return None
-    
-    import requests
     
     try:
         # Try using ollama library first (if available)
@@ -374,23 +403,32 @@ with st.sidebar:
     st.markdown("---")
     st.subheader("🤖 AI Agent Configuration")
     
-    ollama_url = st.text_input("Ollama URL", value="http://localhost:11434", help="Default: http://localhost:11434", key="global_ollama_url")
-    llm_model = "mistral"
+    llm_provider = st.selectbox("Inference Provider", ["Groq (Cloud Fast)", "Ollama (Local)"])
+    st.session_state['llm_provider'] = llm_provider
     
-    if not OLLAMA_AVAILABLE:
-        st.error("⚠️ Ollama API not available via python.")
+    if llm_provider == "Groq (Cloud Fast)":
+        groq_api_key = st.text_input("Groq API Key", type="password", value="")
+        st.session_state['groq_api_key'] = groq_api_key
+        llm_model = st.selectbox("Groq Model", ["llama3-8b-8192", "llama3-70b-8192", "mixtral-8x7b-32768", "gemma-7b-it"], index=0)
+        ollama_url = ""
     else:
-        available_models = get_available_ollama_models(ollama_url)
-        if available_models:
-            default_index = 0
-            for preferred in ["llama3", "llama3.1", "mistral", "qwen3.5", "phi4"]:
-                if preferred in available_models:
-                    default_index = available_models.index(preferred)
-                    break
-            llm_model = st.selectbox("LLM Model (Ollama)", available_models, index=default_index, key="global_llm_model")
+        ollama_url = st.text_input("Ollama URL", value="http://localhost:11434", help="Default: http://localhost:11434")
+        llm_model = "mistral"
+        
+        if not OLLAMA_AVAILABLE:
+            st.error("⚠️ Ollama API not available via python.")
         else:
-            st.error("⚠️ No models found in Ollama!")
-            st.info("Pull a model first: ollama pull mistral")
+            available_models = get_available_ollama_models(ollama_url)
+            if available_models:
+                default_index = 0
+                for preferred in ["llama3", "llama3.1", "mistral", "qwen3.5", "phi4"]:
+                    if preferred in available_models:
+                        default_index = available_models.index(preferred)
+                        break
+                llm_model = st.selectbox("LLM Model (Ollama)", available_models, index=default_index)
+            else:
+                st.error("⚠️ No models found in Ollama!")
+                st.info("Pull a model first: ollama pull mistral")
 
     st.markdown("---")
     # Rule source selection
