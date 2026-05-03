@@ -505,7 +505,7 @@ with st.sidebar:
                         default_ef = embedding_functions.DefaultEmbeddingFunction()
                         return chroma_client.get_or_create_collection(name="rulebook_reference", embedding_function=default_ef), chroma_client
                     
-                    if st.button("🧠 Ingest to Smart RAG Database", type="primary", key="ingest_rag_btn"):
+                    if st.button("🧠 Ingest", type="primary", key="ingest_rag_btn"):
                         with st.spinner("Processing PDF with Smart Chunking..."):
                             # Save temp file
                             with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
