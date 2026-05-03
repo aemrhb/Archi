@@ -516,7 +516,8 @@ with st.sidebar:
                                 chunks = smart_chunk_pdf(tmp_path, source_name=uploaded_pdf.name)
                             
                                 if chunks:
-                                    st.info(f"Generated {len(chunks)} smart chunks. Vectorizing...")
+                                    if st.session_state.get("user_mode") == "admin":
+                                        st.info(f"Generated {len(chunks)} smart chunks. Vectorizing...")
                                     coll, client = get_rulebook_collection()
                                 
                                     # Clear old collection
@@ -537,7 +538,10 @@ with st.sidebar:
                                             documents=docs[i:i+batch_size],
                                             metadatas=metas[i:i+batch_size]
                                         )
-                                    st.success("✅ RAG Database updated successfully! You can now use the Agent to check elements.")
+                                    if st.session_state.get("user_mode") == "admin":
+                                        st.success("✅ RAG Database updated successfully! You can now use the Agent to check elements.")
+                                    else:
+                                        st.success("✅ Database updated")
                                     st.session_state['rag_ingested'] = True
                                 else:
                                     st.error("No chunks extracted from PDF.")
@@ -547,7 +551,8 @@ with st.sidebar:
                     try:
                         coll, _ = get_rulebook_collection()
                         if coll.count() > 0:
-                            st.success(f"📚 RAG DB active ({coll.count()} chunks stored).")
+                            if st.session_state.get("user_mode") == "admin":
+                                st.success(f"📚 RAG DB active ({coll.count()} chunks stored).")
                     except Exception:
                         pass
     
