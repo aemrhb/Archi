@@ -291,6 +291,143 @@ def call_local_llm(prompt, model_name="llama3", base_url="http://localhost:11434
         st.code(traceback.format_exc())
         return None
 
+def agentic_evaluate_compliance(rules_text, elements_df, element_type, llm_model, ollama_url):
+    import json
+    import requests
+    import streamlit as st
+    
+    provider = st.session_state.get('llm_provider', 'Ollama (Local)')
+    columns_list = elements_df.columns.tolist()
+    
+    system_prompt = f"""You are an expert Building Code Compliance Agent.
+Your task is to read the building regulations and evaluate if the BIM elements comply.
+
+AVAILABLE RULES EXTRACTED FROM PDF:
+=============================================
+{rules_text}
+=============================================
+
+BIM ELEMENT TYPE: {element_type}
+AVAILABLE COLUMNS IN DATASET: {columns_list}
+TOTAL ELEMENTS: {len(elements_df)}
+
+INSTRUCTIONS:
+1. Read the rules and determine the exact geometric requirement (e.g. min width, max area).
+2. Use the 'evaluate_geometric_compliance' tool to execute a pandas query that finds the FAILED elements.
+   - For column names with spaces or special characters, you MUST wrap them in backticks in the query string.
+   - Example valid queries: `\`Width (mm)\` < 900` or `\`Area (m²)\` > 12.5`
+3. After receiving the tool's result, write a beautifully formatted Markdown compliance report summarizing the findings. Include the IDs of the failing elements.
+   - If no relevant geometric rules exist for {element_type}, do not call the tool. Just state that no rules apply.
+"""
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": f"Please evaluate all {element_type} elements for compliance."}
+    ]
+    
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "evaluate_geometric_compliance",
+                "description": "Execute a pandas query to filter the BIM dataset for elements that FAIL compliance.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "pandas_query": {
+                            "type": "string",
+                            "description": "A valid pandas query string. Example: `\`Width (mm)\` < 900`. Returns the number of failing elements and their GlobalIds."
+                        },
+                        "reasoning": {
+                            "type": "string",
+                            "description": "Explanation of why this condition was chosen based on the rules."
+                        }
+                    },
+                    "required": ["pandas_query", "reasoning"]
+                }
+            }
+        }
+    ]
+    
+    def execute_tool(tool_call):
+        try:
+            args = json.loads(tool_call["function"]["arguments"])
+            query_str = args.get("pandas_query", "")
+            reasoning = args.get("reasoning", "")
+            
+            # Execute query safely
+            failed_df = elements_df.query(query_str)
+            if failed_df.empty:
+                return f"Tool Execution Success. Reasoning: {reasoning}. Result: 0 elements failed compliance."
+            else:
+                ids = failed_df['GlobalId'].tolist()
+                return f"Tool Execution Success. Reasoning: {reasoning}. Result: {len(failed_df)} elements FAILED compliance. Failing IDs: {ids[:50]} {'... (truncated)' if len(ids)>50 else ''}"
+        except Exception as e:
+            return f"Error executing pandas query '{query_str}': {e}. Please refine your query string and ensure you use backticks for column names with spaces."
+
+    if provider == "Groq (Cloud Fast)":
+        api_key = st.session_state.get('groq_api_key', '')
+        if not api_key:
+            return "❌ Groq API Key is missing! Please configure it in the sidebar or Streamlit Secrets."
+            
+        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+        
+        # Max 3 turns to prevent infinite loops
+        for turn in range(3):
+            data = {"model": llm_model, "messages": messages, "tools": tools, "tool_choice": "auto", "temperature": 0.1}
+            response = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=data, timeout=60)
+            if response.status_code != 200:
+                return f"❌ Groq API Error: {response.text}"
+                
+            response_json = response.json()
+            message = response_json['choices'][0]['message']
+            messages.append(message)
+            
+            if message.get("tool_calls"):
+                for tool_call in message["tool_calls"]:
+                    if tool_call["function"]["name"] == "evaluate_geometric_compliance":
+                        result_str = execute_tool(tool_call)
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tool_call["id"],
+                            "name": "evaluate_geometric_compliance",
+                            "content": result_str
+                        })
+            else:
+                return message["content"]
+                
+        return "❌ Agent exceeded maximum turns without returning a final answer."
+
+    else:
+        # Ollama logic
+        try:
+            for turn in range(3):
+                data = {"model": llm_model, "messages": messages, "tools": tools, "stream": False}
+                response = requests.post(f"{ollama_url}/api/chat", json=data, timeout=120)
+                if response.status_code != 200:
+                    return f"❌ Ollama API Error: {response.text}"
+                    
+                response_json = response.json()
+                message = response_json.get('message', {})
+                messages.append(message)
+                
+                if message.get("tool_calls"):
+                    for tool_call in message["tool_calls"]:
+                        if tool_call["function"]["name"] == "evaluate_geometric_compliance":
+                            result_str = execute_tool(tool_call)
+                            messages.append({
+                                "role": "tool",
+                                "name": "evaluate_geometric_compliance",
+                                "content": result_str
+                            })
+                else:
+                    return message.get("content", "No output generated.")
+                    
+            return "❌ Agent exceeded maximum turns without returning a final answer."
+        except Exception as e:
+            return f"❌ Error communicating with Ollama: {e}"
+
+
 def extract_rules_from_pdf(pdf_text, model_name="llama3", base_url="http://localhost:11434"):
     """
     Use LLM to extract building code rules from PDF text.
@@ -1238,29 +1375,8 @@ if uploaded_file is not None:
                                 with st.spinner("Agent is evaluating rules against your IFC geometry..."):
                                     # Create the massive string for the prompt
                                     rules_text = "\n\n".join(results['documents'][0])
-                                    elements_csv = type_df[display_cols].to_csv(index=False)
                                     
-                                    prompt = f"""You are a Building Code Compliance Engineer.
-Evaluate if the following {element_type} element complies with the building code.
-AVAILABLE RULES EXTRACTED FROM PDF:
-=============================================
-{rules_text}
-=============================================
-
-IFC ELEMENTS FROM BIM MODEL ({element_type}):
-=============================================
-{elements_csv}
-=============================================
-
-YOUR TASK:
-1. Examine the available rules specifically looking for geometric limits (min width, max area, etc.). If there are NO relevant rules for this element type in the text, clearly state "No rules found for this element type in the retrieved text."
-2. Evaluate each IFC element against the rules.
-3. List the elements that FAIL compliance or state "All elements pass."
-4. Be mathematically precise.
-
-Respond with a beautifully formatted Markdown compliance report."""
-
-                                    response = call_local_llm(prompt, llm_model, ollama_url)
+                                    response = agentic_evaluate_compliance(rules_text, type_df, element_type, llm_model, ollama_url)
                                     if response:
                                         st.session_state[f"rag_report_{element_type}"] = response
                                         st.success("Evaluation complete.")
