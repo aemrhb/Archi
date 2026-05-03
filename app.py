@@ -283,7 +283,7 @@ def extract_rules_from_pdf(pdf_text, model_name="llama3", base_url="http://local
         progress_bar.progress((i + 1) / len(chunks), text=progress_text)
         
         prompt = f"""You are a precise building code extraction system. 
-The input text contains structured page data and tables from a German Building Code (NBauO).
+The input text contains structured page data and tables from a Building Code Document.
 
 GOAL: Extract THREE types of rules from the text:
 1. DIMENSIONAL: Specific numeric requirements (e.g., "900 mm").
@@ -393,10 +393,10 @@ OUTPUT ONLY THE JSON ARRAY. DO NOT INCLUDE ANY EXPLANATORY TEXT BEFORE OR AFTER 
     return all_valid_rules
 
 
-# --- SIDEBAR: NBauO RULE CONFIGURATION ---
+# --- SIDEBAR: RULE CONFIGURATION ---
 with st.sidebar:
-    st.header("🇩🇪 NBauO Rule Configuration")
-    st.markdown("Configure building code compliance rules (Niedersächsische Bauordnung)")
+    st.header("📋 Building Code Compliance")
+    st.markdown("Configure global building code rules to automatically check your BIM models.")
     
     
     # --- GLOBAL LLM CONFIGURATION ---
@@ -452,17 +452,17 @@ with st.sidebar:
                 st.error("⚠️ PDF processing not available. Install with: pip install pdfplumber")
             else:
                 uploaded_pdf = st.file_uploader(
-                    "Upload NBauO Rule Book PDF",
+                    "Upload Rule Book PDF",
                     type=["pdf"],
-                    help="Upload the full PDF of the building code rule book"
+                    help="Upload any building code rule book or standard in PDF format"
                 )
                 
                 if uploaded_pdf is not None:
                     # RAG Database initialization function
-                    def get_nbauo_collection():
-                        chroma_client = chromadb.PersistentClient(path="./nbauo_db")
-                        default_ef = embedding_functions.DefaultEmbeddingFunction()
-                        return chroma_client.get_or_create_collection(name="nbauo_reference", embedding_function=default_ef), chroma_client
+                                    def get_rulebook_collection():
+                                        chroma_client = chromadb.PersistentClient(path="./rules_db")
+                                        default_ef = embedding_functions.DefaultEmbeddingFunction()
+                                        return chroma_client.get_or_create_collection(name="rulebook_reference", embedding_function=default_ef), chroma_client
                         
                     if st.button("🧠 Ingest to Smart RAG Database", type="primary", key="ingest_rag_btn"):
                         with st.spinner("Processing PDF with Smart Chunking..."):
@@ -476,12 +476,12 @@ with st.sidebar:
                                 
                                 if chunks:
                                     st.info(f"Generated {len(chunks)} smart chunks. Vectorizing...")
-                                    coll, client = get_nbauo_collection()
+                                    coll, client = get_rulebook_collection()
                                     
                                     # Clear old collection
                                     try:
-                                        client.delete_collection(name="nbauo_reference")
-                                        coll, _ = get_nbauo_collection()
+                                        client.delete_collection(name="rulebook_reference")
+                                        coll, _ = get_rulebook_collection()
                                     except: pass
                                     
                                     ids = [c["id"] for c in chunks]
@@ -504,7 +504,7 @@ with st.sidebar:
                                 os.remove(tmp_path)
                             
                     try:
-                        coll, _ = get_nbauo_collection()
+                        coll, _ = get_rulebook_collection()
                         if coll.count() > 0:
                             st.success(f"📚 RAG DB active ({coll.count()} chunks stored).")
                     except Exception:
@@ -524,7 +524,7 @@ with st.sidebar:
                 max_value=5000,
                 value=900,
                 step=50,
-                help="NBauO requires minimum 90 cm (900 mm) for barrier-free access"
+                help="Set to minimum required (e.g. 900 mm for barrier-free access)"
             )
             
             # Minimum door height
@@ -612,11 +612,9 @@ with st.sidebar:
     else:
         compliance_rules = None
 
-st.title("🏗️ IFC File Element Viewer")
-st.markdown("""
-Upload an **IFC model** to see all its elements with geometric information, grouped by type.
-This tool uses `ifcopenshell` to parse IFC files and extract element information including dimensions, areas, and volumes.
-""")
+st.title("🏗️ Smart Building Compliance Checker")
+st.markdown("##### Upload your **IFC file** to automatically view its elements, evaluate compliance rules, and query the AI agent.")
+st.divider()
 
 # --- UPLOAD SECTION ---
 uploaded_file = st.file_uploader("Upload your IFC model (.ifc)", type=["ifc"])
@@ -1107,7 +1105,7 @@ if uploaded_file is not None:
                     st.success("✅ **All elements comply with configured manual rules!**")
                 st.markdown("---")
             elif rule_source == "Upload PDF Rule Book (Smart RAG Ingestion)":
-                st.info("💡 **Smart RAG Mode Active:** Expand the element groups below and use the '🔍 Agent: DB Search' buttons to evaluate elements directly against the NBauO building code.")
+                st.info("💡 **Smart RAG Mode Active:** Expand the element groups below and use the '🔍 Agent: DB Search' buttons to evaluate elements directly against the building code.")
                 st.markdown("---")
             
             # Step 11: Group elements by type and display
@@ -1155,21 +1153,21 @@ if uploaded_file is not None:
                     st.markdown("---")
                     col1, col2 = st.columns([1, 4])
                     with col1:
-                        rag_btn = st.button(f"🔍 Agent: DB Search", key=f"rag_search_{element_type}", help=f"Search NBauO database for {element_type} rules")
+                        rag_btn = st.button(f"🔍 Agent: DB Search", key=f"rag_search_{element_type}", help=f"Search database for {element_type} rules")
                     
                     if rag_btn or st.session_state.get(f"rag_visible_{element_type}", False):
                         st.session_state[f"rag_visible_{element_type}"] = True
                         
                         try:
                             # 1. Direct fetch from ChromaDB
-                            chroma_client = chromadb.PersistentClient(path="./nbauo_db")
+                            chroma_client = chromadb.PersistentClient(path="./rules_db")
                             default_ef = embedding_functions.DefaultEmbeddingFunction()
-                            coll = chroma_client.get_collection(name="nbauo_reference", embedding_function=default_ef)
+                            coll = chroma_client.get_collection(name="rulebook_reference", embedding_function=default_ef)
                             
                             # --- AGENTIC QUERY GENERATION ---
                             if f"rag_query_{element_type}" not in st.session_state:
-                                with st.spinner("Agent is generating optimal German search query..."):
-                                    query_prompt = f"I need to search a German building code document (NBauO) for regulations applying to the BIM element type '{element_type}'. Please generate a highly enriched German search query string containing architectural synonyms and regulatory concepts (e.g., Brandschutz, Fluchtwege, Barrierefreiheit, Abmessungen, Anforderungen) that apply to this element. Provide ONLY the search string, nothing else."
+                                with st.spinner("Agent is generating optimal search query..."):
+                                    query_prompt = f"I need to search a building code document for regulations applying to the BIM element type '{element_type}'. Please generate a highly enriched search query string containing architectural synonyms and regulatory concepts that apply to this element. Provide ONLY the search string, nothing else."
                                     generated_query = call_local_llm(query_prompt, llm_model, ollama_url).strip()
                                     
                                     # Fallback if LLM fails
@@ -1195,9 +1193,9 @@ if uploaded_file is not None:
                                     rules_text = "\n\n".join(results['documents'][0])
                                     elements_csv = type_df[display_cols].to_csv(index=False)
                                     
-                                    prompt = f"""You are a German Building Code (NBauO) Compliance Engineer.
-
-AVAILABLE RULES EXTRACTED FROM PDF (NBauO):
+                                    prompt = f"""You are a Building Code Compliance Engineer.
+Evaluate if the following {element_type} element complies with the building code.
+AVAILABLE RULES EXTRACTED FROM PDF:
 =============================================
 {rules_text}
 =============================================
@@ -1355,9 +1353,9 @@ Respond with a beautifully formatted Markdown compliance report."""
                 try:
                     import chromadb
                     from chromadb.utils import embedding_functions
-                    chroma_client = chromadb.PersistentClient(path="./nbauo_db")
+                    chroma_client = chromadb.PersistentClient(path="./rules_db")
                     default_ef = embedding_functions.DefaultEmbeddingFunction()
-                    coll = chroma_client.get_collection(name="nbauo_reference", embedding_function=default_ef)
+                    coll = chroma_client.get_collection(name="rulebook_reference", embedding_function=default_ef)
                     results = coll.query(query_texts=[prompt], n_results=3)
                     if results and results['documents'] and results['documents'][0]:
                         rag_context = "\n\n".join(results['documents'][0])
@@ -1368,14 +1366,14 @@ Respond with a beautifully formatted Markdown compliance report."""
                 import requests
                 
                 system_prompt = f"""You are a German Building Code Expert & BIM Consultant.
-You are helping the user understand their building model compliance according to the NBauO.
+You are helping the user understand their building model compliance according to the rule book.
 
 --- CONTEXT 1: CURRENT BIM EVALUATION REPORTS ---
 The user has evaluated some elements in their model. Here are the active reports:
 {reports_context}
 
 --- CONTEXT 2: RELEVANT BUILDING CODE SECTIONS ---
-Here are sections from the NBauO rule book relevant to the user's question:
+Here are sections from the rule book relevant to the user's question:
 {rag_context}
 --------------------------------------------------
 
