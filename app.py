@@ -1223,7 +1223,8 @@ if uploaded_file is not None:
                                     st.session_state[f"rag_query_{element_type}"] = generated_query
                             
                             query_str = st.session_state[f"rag_query_{element_type}"]
-                            st.caption(f"🧠 *Agent Query:* `{query_str}`")
+                            if st.session_state.get("user_mode") == "admin":
+                                st.caption(f"🧠 *Agent Query:* `{query_str}`")
                             
                             results = coll.query(query_texts=[query_str], n_results=4)
                             
