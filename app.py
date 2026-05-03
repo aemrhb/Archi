@@ -372,8 +372,8 @@ INSTRUCTIONS:
             
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
         
-        # Max 3 turns to prevent infinite loops
-        for turn in range(3):
+        # Max 5 turns to prevent infinite loops
+        for turn in range(5):
             data = {"model": llm_model, "messages": messages, "tools": tools, "tool_choice": "auto", "temperature": 0.1}
             response = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=data, timeout=60)
             if response.status_code != 200:
@@ -396,12 +396,15 @@ INSTRUCTIONS:
             else:
                 return message["content"]
                 
-        return "❌ Agent exceeded maximum turns without returning a final answer."
+        debug_log = "\\n\\n**Debug Logs:**\\n"
+        for m in messages:
+            debug_log += f"- **{m['role']}**: {m.get('content') or m.get('tool_calls')}\\n"
+        return "❌ Agent exceeded maximum turns without returning a final answer." + debug_log
 
     else:
         # Ollama logic
         try:
-            for turn in range(3):
+            for turn in range(5):
                 data = {"model": llm_model, "messages": messages, "tools": tools, "stream": False}
                 response = requests.post(f"{ollama_url}/api/chat", json=data, timeout=120)
                 if response.status_code != 200:
@@ -423,7 +426,10 @@ INSTRUCTIONS:
                 else:
                     return message.get("content", "No output generated.")
                     
-            return "❌ Agent exceeded maximum turns without returning a final answer."
+            debug_log = "\\n\\n**Debug Logs:**\\n"
+            for m in messages:
+                debug_log += f"- **{m['role']}**: {m.get('content') or m.get('tool_calls')}\\n"
+            return "❌ Agent exceeded maximum turns without returning a final answer." + debug_log
         except Exception as e:
             return f"❌ Error communicating with Ollama: {e}"
 
