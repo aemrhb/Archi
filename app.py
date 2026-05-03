@@ -459,10 +459,10 @@ with st.sidebar:
                 
                 if uploaded_pdf is not None:
                     # RAG Database initialization function
-                                    def get_rulebook_collection():
-                                        chroma_client = chromadb.PersistentClient(path="./rules_db")
-                                        default_ef = embedding_functions.DefaultEmbeddingFunction()
-                                        return chroma_client.get_or_create_collection(name="rulebook_reference", embedding_function=default_ef), chroma_client
+                    def get_rulebook_collection():
+                        chroma_client = chromadb.PersistentClient(path="./rules_db")
+                        default_ef = embedding_functions.DefaultEmbeddingFunction()
+                        return chroma_client.get_or_create_collection(name="rulebook_reference", embedding_function=default_ef), chroma_client
                         
                     if st.button("🧠 Ingest to Smart RAG Database", type="primary", key="ingest_rag_btn"):
                         with st.spinner("Processing PDF with Smart Chunking..."):
