@@ -31,10 +31,10 @@ if st.session_state['user_mode'] is None:
     
     col1, col2 = st.columns(2)
     with col1:
-        st.subheader("Customer")
+        st.subheader("User")
         st.markdown("Access the compliance checker to upload and evaluate your BIM models.")
-        if st.button("Enter as Customer", type="primary", use_container_width=True):
-            st.session_state['user_mode'] = 'customer'
+        if st.button("Enter as User", type="primary", use_container_width=True):
+            st.session_state['user_mode'] = 'user'
             st.rerun()
             
     with col2:
@@ -424,46 +424,30 @@ OUTPUT ONLY THE JSON ARRAY. DO NOT INCLUDE ANY EXPLANATORY TEXT BEFORE OR AFTER 
 
 
 # --- SIDEBAR: RULE CONFIGURATION ---
-if st.session_state.get("user_mode") == "customer":
-    llm_provider = "Groq (Cloud Fast)"
-    groq_api_key = st.secrets.get("GROQ_API_KEY", "") if hasattr(st, "secrets") else ""
-    st.session_state["groq_api_key"] = groq_api_key
-    st.session_state["llm_provider"] = llm_provider
-    llm_model = "llama-3.1-8b-instant"
-    ollama_url = ""
-    rule_source = "Upload PDF Rule Book (Smart RAG Ingestion)"
-    enable_compliance = True
-    compliance_rules = st.session_state.get("extracted_rules", None)
-    with st.sidebar:
-        if st.button("Log Out (Admin)", use_container_width=True):
-            st.session_state["user_mode"] = None
-            st.rerun()
-        st.info("You are in Customer Mode. AI Rules are pre-configured.")
-        if st.button("Log Out", use_container_width=True):
-            st.session_state["user_mode"] = None
-            st.rerun()
-elif st.session_state.get("user_mode") == "admin":
-    with st.sidebar:
-        st.header("📋 Building Code Compliance")
-        st.markdown("Configure global building code rules to automatically check your BIM models.")
+with st.sidebar:
+    st.header("📋 Building Code Compliance")
+    st.markdown("Configure global building code rules to automatically check your BIM models.")
     
+    if st.button("Log Out", use_container_width=True):
+        st.session_state["user_mode"] = None
+        st.rerun()
     
-        # --- GLOBAL LLM CONFIGURATION ---
-        st.markdown("---")
-        st.subheader("🤖 AI Agent Configuration")
+    # --- GLOBAL LLM CONFIGURATION ---
+    st.markdown("---")
+    st.subheader("🤖 AI Agent Configuration")
     
+    if st.session_state.get("user_mode") == "admin":
         llm_provider = st.selectbox("Inference Provider", ["Groq (Cloud Fast)", "Ollama (Local)"])
-        st.session_state['llm_provider'] = llm_provider
-    
+        st.session_state["llm_provider"] = llm_provider
+        
         if llm_provider == "Groq (Cloud Fast)":
             groq_api_key = st.text_input("Groq API Key", type="password", value="")
-            st.session_state['groq_api_key'] = groq_api_key
+            st.session_state["groq_api_key"] = groq_api_key
             llm_model = st.selectbox("Groq Model", ["llama-3.1-8b-instant", "llama-3.3-70b-versatile", "qwen/qwen3-32b"], index=0)
             ollama_url = ""
         else:
             ollama_url = st.text_input("Ollama URL", value="http://localhost:11434", help="Default: http://localhost:11434")
             llm_model = "mistral"
-        
             if not OLLAMA_AVAILABLE:
                 st.error("⚠️ Ollama API not available via python.")
             else:
@@ -478,188 +462,196 @@ elif st.session_state.get("user_mode") == "admin":
                 else:
                     st.error("⚠️ No models found in Ollama!")
                     st.info("Pull a model first: ollama pull mistral")
-
-        st.markdown("---")
-        # Rule source selection
-        rule_source = st.radio(
-            "Rule Source",
-            ["Upload PDF Rule Book (Smart RAG Ingestion)", "Manual Configuration"],
-            help="Choose to upload a PDF and index it with Smart RAG, or configure manually"
-        )
+    else:
+        user_ai_choice = st.selectbox("AI Model", ["Auto (Recommended)", "Claude 3.5 Sonnet (Placeholder)", "GPT-4o (Placeholder)"])
+        llm_provider = "Groq (Cloud Fast)"
+        groq_api_key = st.secrets.get("GROQ_API_KEY", "") if hasattr(st, "secrets") else ""
+        st.session_state["groq_api_key"] = groq_api_key
+        st.session_state["llm_provider"] = llm_provider
+        llm_model = "llama-3.1-8b-instant"
+        ollama_url = ""
     
-        # Enable/disable compliance checking
-        enable_compliance = st.checkbox("Enable Compliance Checking", value=True)
+    st.markdown("---")
+    # Rule source selection
+    rule_source = st.radio(
+        "Rule Source",
+        ["Upload PDF Rule Book (Smart RAG Ingestion)", "Manual Configuration"],
+        help="Choose to upload a PDF and index it with Smart RAG, or configure manually"
+    )
     
-        if enable_compliance:
-            compliance_rules = None
+    # Enable/disable compliance checking
+    enable_compliance = st.checkbox("Enable Compliance Checking", value=True)
+    
+    if enable_compliance:
+        compliance_rules = None
+    
+        if rule_source == "Upload PDF Rule Book (Smart RAG Ingestion)":
+            st.markdown("---")
+            st.subheader("📄 Upload Rule Book PDF")
         
-            if rule_source == "Upload PDF Rule Book (Smart RAG Ingestion)":
-                st.markdown("---")
-                st.subheader("📄 Upload Rule Book PDF")
+            if not PDF_AVAILABLE:
+                st.error("⚠️ PDF processing not available. Install with: pip install pdfplumber")
+            else:
+                uploaded_pdf = st.file_uploader(
+                    "Upload Rule Book PDF",
+                    type=["pdf"],
+                    help="Upload any building code rule book or standard in PDF format"
+                )
             
-                if not PDF_AVAILABLE:
-                    st.error("⚠️ PDF processing not available. Install with: pip install pdfplumber")
-                else:
-                    uploaded_pdf = st.file_uploader(
-                        "Upload Rule Book PDF",
-                        type=["pdf"],
-                        help="Upload any building code rule book or standard in PDF format"
-                    )
-                
-                    if uploaded_pdf is not None:
-                        # RAG Database initialization function
-                        def get_rulebook_collection():
-                            chroma_client = chromadb.PersistentClient(path="./rules_db")
-                            default_ef = embedding_functions.DefaultEmbeddingFunction()
-                            return chroma_client.get_or_create_collection(name="rulebook_reference", embedding_function=default_ef), chroma_client
-                        
-                        if st.button("🧠 Ingest to Smart RAG Database", type="primary", key="ingest_rag_btn"):
-                            with st.spinner("Processing PDF with Smart Chunking..."):
-                                # Save temp file
-                                with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-                                    tmp.write(uploaded_pdf.getvalue())
-                                    tmp_path = tmp.name
-                                
-                                try:
-                                    chunks = smart_chunk_pdf(tmp_path, source_name=uploaded_pdf.name)
-                                
-                                    if chunks:
-                                        st.info(f"Generated {len(chunks)} smart chunks. Vectorizing...")
-                                        coll, client = get_rulebook_collection()
-                                    
-                                        # Clear old collection
-                                        try:
-                                            client.delete_collection(name="rulebook_reference")
-                                            coll, _ = get_rulebook_collection()
-                                        except: pass
-                                    
-                                        ids = [c["id"] for c in chunks]
-                                        docs = [c["text"] for c in chunks]
-                                        metas = [c["metadata"] for c in chunks]
-                                    
-                                        # Batch add
-                                        batch_size = 100
-                                        for i in range(0, len(ids), batch_size):
-                                            coll.add(
-                                                ids=ids[i:i+batch_size],
-                                                documents=docs[i:i+batch_size],
-                                                metadatas=metas[i:i+batch_size]
-                                            )
-                                        st.success("✅ RAG Database updated successfully! You can now use the Agent to check elements.")
-                                        st.session_state['rag_ingested'] = True
-                                    else:
-                                        st.error("No chunks extracted from PDF.")
-                                finally:
-                                    os.remove(tmp_path)
+                if uploaded_pdf is not None:
+                    # RAG Database initialization function
+                    def get_rulebook_collection():
+                        chroma_client = chromadb.PersistentClient(path="./rules_db")
+                        default_ef = embedding_functions.DefaultEmbeddingFunction()
+                        return chroma_client.get_or_create_collection(name="rulebook_reference", embedding_function=default_ef), chroma_client
+                    
+                    if st.button("🧠 Ingest to Smart RAG Database", type="primary", key="ingest_rag_btn"):
+                        with st.spinner("Processing PDF with Smart Chunking..."):
+                            # Save temp file
+                            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+                                tmp.write(uploaded_pdf.getvalue())
+                                tmp_path = tmp.name
                             
-                        try:
-                            coll, _ = get_rulebook_collection()
-                            if coll.count() > 0:
-                                st.success(f"📚 RAG DB active ({coll.count()} chunks stored).")
-                        except Exception:
-                            pass
+                            try:
+                                chunks = smart_chunk_pdf(tmp_path, source_name=uploaded_pdf.name)
+                            
+                                if chunks:
+                                    st.info(f"Generated {len(chunks)} smart chunks. Vectorizing...")
+                                    coll, client = get_rulebook_collection()
+                                
+                                    # Clear old collection
+                                    try:
+                                        client.delete_collection(name="rulebook_reference")
+                                        coll, _ = get_rulebook_collection()
+                                    except: pass
+                                
+                                    ids = [c["id"] for c in chunks]
+                                    docs = [c["text"] for c in chunks]
+                                    metas = [c["metadata"] for c in chunks]
+                                
+                                    # Batch add
+                                    batch_size = 100
+                                    for i in range(0, len(ids), batch_size):
+                                        coll.add(
+                                            ids=ids[i:i+batch_size],
+                                            documents=docs[i:i+batch_size],
+                                            metadatas=metas[i:i+batch_size]
+                                        )
+                                    st.success("✅ RAG Database updated successfully! You can now use the Agent to check elements.")
+                                    st.session_state['rag_ingested'] = True
+                                else:
+                                    st.error("No chunks extracted from PDF.")
+                            finally:
+                                os.remove(tmp_path)
+                        
+                    try:
+                        coll, _ = get_rulebook_collection()
+                        if coll.count() > 0:
+                            st.success(f"📚 RAG DB active ({coll.count()} chunks stored).")
+                    except Exception:
+                        pass
+    
+        elif rule_source == "Manual Configuration":
+            st.markdown("---")
+            st.subheader("Manual Rule Configuration")
         
-            elif rule_source == "Manual Configuration":
-                st.markdown("---")
-                st.subheader("Manual Rule Configuration")
-            
-                st.markdown("---")
-                st.subheader("Door Requirements")
-            
-                # Minimum door width for barrier-free access
-                min_door_width = st.number_input(
-                    "Minimum Door Width (mm)",
-                    min_value=0,
-                    max_value=5000,
-                    value=900,
-                    step=50,
-                    help="Set to minimum required (e.g. 900 mm for barrier-free access)"
-                )
-            
-                # Minimum door height
-                min_door_height = st.number_input(
-                    "Minimum Door Height (mm)",
-                    min_value=0,
-                    max_value=5000,
-                    value=2000,
-                    step=50,
-                    help="Standard minimum door height"
-                )
-            
-                st.markdown("---")
-                st.subheader("Window Requirements")
-            
-                # Minimum window dimensions
-                min_window_width = st.number_input(
-                    "Minimum Window Width (mm)",
-                    min_value=0,
-                    max_value=5000,
-                    value=0,
-                    step=50,
-                    help="Set to 0 to disable window width checking"
-                )
-            
-                min_window_height = st.number_input(
-                    "Minimum Window Height (mm)",
-                    min_value=0,
-                    max_value=5000,
-                    value=0,
-                    step=50,
-                    help="Set to 0 to disable window height checking"
-                )
-            
-                st.markdown("---")
-                st.subheader("Space/Room Requirements")
-            
-                # Minimum room area
-                min_room_area = st.number_input(
-                    "Minimum Room Area (m²)",
-                    min_value=0.0,
-                    max_value=1000.0,
-                    value=0.0,
-                    step=0.5,
-                    help="Set to 0 to disable room area checking"
-                )
-            
-                # Minimum room height
-                min_room_height = st.number_input(
-                    "Minimum Room Height (m)",
-                    min_value=0.0,
-                    max_value=10.0,
-                    value=0.0,
-                    step=0.1,
-                    help="Set to 0 to disable room height checking"
-                )
-            
-                st.markdown("---")
-                st.subheader("Wall Requirements")
-            
-                # Minimum wall thickness
-                min_wall_thickness = st.number_input(
-                    "Minimum Wall Thickness (mm)",
-                    min_value=0,
-                    max_value=1000,
-                    value=0,
-                    step=10,
-                    help="Set to 0 to disable wall thickness checking"
-                )
-            
-                # Store rules in session state
-                compliance_rules = {
-                    'min_door_width': min_door_width,
-                    'min_door_height': min_door_height,
-                    'min_window_width': min_window_width,
-                    'min_window_height': min_window_height,
-                    'min_room_area': min_room_area,
-                    'min_room_height': min_room_height,
-                    'min_wall_thickness': min_wall_thickness
-                }
+            st.markdown("---")
+            st.subheader("Door Requirements")
         
-            # Use extracted rules if available, otherwise use manual rules
-            if compliance_rules is None and 'extracted_rules' in st.session_state:
-                compliance_rules = st.session_state['extracted_rules']
-        else:
-            compliance_rules = None
+            # Minimum door width for barrier-free access
+            min_door_width = st.number_input(
+                "Minimum Door Width (mm)",
+                min_value=0,
+                max_value=5000,
+                value=900,
+                step=50,
+                help="Set to minimum required (e.g. 900 mm for barrier-free access)"
+            )
+        
+            # Minimum door height
+            min_door_height = st.number_input(
+                "Minimum Door Height (mm)",
+                min_value=0,
+                max_value=5000,
+                value=2000,
+                step=50,
+                help="Standard minimum door height"
+            )
+        
+            st.markdown("---")
+            st.subheader("Window Requirements")
+        
+            # Minimum window dimensions
+            min_window_width = st.number_input(
+                "Minimum Window Width (mm)",
+                min_value=0,
+                max_value=5000,
+                value=0,
+                step=50,
+                help="Set to 0 to disable window width checking"
+            )
+        
+            min_window_height = st.number_input(
+                "Minimum Window Height (mm)",
+                min_value=0,
+                max_value=5000,
+                value=0,
+                step=50,
+                help="Set to 0 to disable window height checking"
+            )
+        
+            st.markdown("---")
+            st.subheader("Space/Room Requirements")
+        
+            # Minimum room area
+            min_room_area = st.number_input(
+                "Minimum Room Area (m²)",
+                min_value=0.0,
+                max_value=1000.0,
+                value=0.0,
+                step=0.5,
+                help="Set to 0 to disable room area checking"
+            )
+        
+            # Minimum room height
+            min_room_height = st.number_input(
+                "Minimum Room Height (m)",
+                min_value=0.0,
+                max_value=10.0,
+                value=0.0,
+                step=0.1,
+                help="Set to 0 to disable room height checking"
+            )
+        
+            st.markdown("---")
+            st.subheader("Wall Requirements")
+        
+            # Minimum wall thickness
+            min_wall_thickness = st.number_input(
+                "Minimum Wall Thickness (mm)",
+                min_value=0,
+                max_value=1000,
+                value=0,
+                step=10,
+                help="Set to 0 to disable wall thickness checking"
+            )
+        
+            # Store rules in session state
+            compliance_rules = {
+                'min_door_width': min_door_width,
+                'min_door_height': min_door_height,
+                'min_window_width': min_window_width,
+                'min_window_height': min_window_height,
+                'min_room_area': min_room_area,
+                'min_room_height': min_room_height,
+                'min_wall_thickness': min_wall_thickness
+            }
+    
+        # Use extracted rules if available, otherwise use manual rules
+        if compliance_rules is None and 'extracted_rules' in st.session_state:
+            compliance_rules = st.session_state['extracted_rules']
+    else:
+        compliance_rules = None
 
 st.title("🏗️ Smart Building Compliance Checker")
 st.markdown("##### Upload your **IFC file** to automatically view its elements, evaluate compliance rules, and query the AI agent.")
