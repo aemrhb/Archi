@@ -1095,7 +1095,7 @@ if uploaded_file is not None:
             return geom
             
         def get_all_properties(product, element_type):
-            \"\"\"Extracts base geometric properties, then dynamically appends all Pset/Qto properties.\"\"\"
+            """Extracts base geometric properties, then dynamically appends all Pset/Qto properties."""
             geom = _get_geometric_properties(product, element_type)
             
             # Extract arbitrary properties from Psets
