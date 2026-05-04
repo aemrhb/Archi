@@ -615,6 +615,15 @@ with st.sidebar:
         ollama_url = ""
     
     st.markdown("---")
+    st.subheader("⚙️ Evaluation Mode")
+    eval_mode = st.radio(
+        "Select Agent Behavior",
+        ["Standard (Fast & Low Token)", "Advanced (Agentic Python Reasoning)"],
+        help="Standard mode uses pure LLM reasoning. Advanced mode writes and executes Python code for 100% mathematical accuracy."
+    )
+    st.session_state["eval_mode"] = eval_mode
+    
+    st.markdown("---")
     # Rule source selection
     rule_source = st.radio(
         "Rule Source",
@@ -1382,7 +1391,31 @@ if uploaded_file is not None:
                                     # Create the massive string for the prompt
                                     rules_text = "\n\n".join(results['documents'][0])
                                     
-                                    response = agentic_evaluate_compliance(rules_text, type_df, element_type, llm_model, ollama_url)
+                                    if st.session_state.get("eval_mode", "").startswith("Advanced"):
+                                        response = agentic_evaluate_compliance(rules_text, type_df, element_type, llm_model, ollama_url)
+                                    else:
+                                        elements_csv = type_df[display_cols].to_csv(index=False)
+                                        prompt = f"""You are a Building Code Compliance Engineer.
+Evaluate if the following {element_type} element complies with the building code.
+AVAILABLE RULES EXTRACTED FROM PDF:
+=============================================
+{rules_text}
+=============================================
+
+IFC ELEMENTS FROM BIM MODEL ({element_type}):
+=============================================
+{elements_csv}
+=============================================
+
+YOUR TASK:
+1. Examine the available rules specifically looking for geometric limits. If there are NO relevant rules, clearly state "No rules found."
+2. Evaluate each IFC element against the rules.
+3. List the elements that FAIL compliance.
+4. Be mathematically precise.
+
+Respond with a beautifully formatted Markdown compliance report."""
+                                        response = call_local_llm(prompt, llm_model, ollama_url)
+                                        
                                     if response:
                                         st.session_state[f"rag_report_{element_type}"] = response
                                         st.success("Evaluation complete.")
