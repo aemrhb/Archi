@@ -927,7 +927,7 @@ if uploaded_file is not None:
             return None
         
         # Helper function to extract geometric properties
-        def get_geometric_properties(product, element_type):
+        def _get_geometric_properties(product, element_type):
             """
             Extract geometric information based on element type.
             Searches in 3 places: Geometry → Psets → Quantities
@@ -1093,6 +1093,38 @@ if uploaded_file is not None:
                     geom['Area (m²)'] = f"{area:.2f}"
             
             return geom
+            
+        def get_all_properties(product, element_type):
+            \"\"\"Extracts base geometric properties, then dynamically appends all Pset/Qto properties.\"\"\"
+            geom = _get_geometric_properties(product, element_type)
+            
+            # Extract arbitrary properties from Psets
+            try:
+                psets = get_psets(product)
+                for pset_name, pset_props in psets.items():
+                    for prop_name, value in pset_props.items():
+                        if value is not None and str(value).strip() != "":
+                            # Avoid overwriting standardized geometric properties
+                            if prop_name not in geom and not any(prop_name in k for k in geom.keys()):
+                                # Filter out some internal IFC garbage properties
+                                if prop_name.lower() not in ['id', 'globalid', 'ownerhistory', 'objectplacement', 'representation']:
+                                    geom[prop_name] = str(value)
+            except:
+                pass
+                
+            # Extract arbitrary quantities from Qto
+            try:
+                qtos = get_qto(product)
+                if qtos:
+                    for qto_name, qto_props in qtos.items():
+                        for prop_name, value in qto_props.items():
+                            if value is not None and str(value).strip() != "":
+                                if prop_name not in geom and not any(prop_name in k for k in geom.keys()):
+                                    geom[prop_name] = str(value)
+            except:
+                pass
+                
+            return geom
         
         # Helper function to extract numeric value from formatted string
         def extract_numeric_value(formatted_str):
@@ -1250,8 +1282,8 @@ if uploaded_file is not None:
             except:
                 pass
             
-            # Step 6: Extract geometric properties
-            geometric_props = get_geometric_properties(product, element_type)
+            # Step 6: Extract ALL properties (geometric + dynamic Psets/Qtos)
+            geometric_props = get_all_properties(product, element_type)
             
             # Step 7: Check compliance with NBauO rules (if enabled)
             compliance_status = "N/A"
