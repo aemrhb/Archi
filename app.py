@@ -1361,6 +1361,7 @@ if uploaded_file is not None:
                 # Filter DataFrame to show only elements of this type
                 # Example: type_df contains only "IfcDoor" elements
                 type_df = df[df["Type"] == element_type]
+                type_df = type_df.dropna(axis=1, how='all')
                 
                     # Display in a collapsible expander section
                 with st.expander(f"🔹 {element_type} ({len(type_df)} elements)", expanded=False):
