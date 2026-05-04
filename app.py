@@ -606,7 +606,19 @@ with st.sidebar:
                     st.error("⚠️ No models found in Ollama!")
                     st.info("Pull a model first: ollama pull mistral")
     else:
-        user_ai_choice = st.selectbox("AI Model", ["Auto (Recommended)", "Claude 3.5 Sonnet (Placeholder)", "GPT-4o (Placeholder)"])
+        user_ai_choice = st.selectbox("AI Model / Mode", [
+            "Auto (Standard Reasoning - Fast)", 
+            "Advanced (Agentic Tool Calling - Accurate Math)",
+            "Claude 3.5 Sonnet (Placeholder)", 
+            "GPT-4o (Placeholder)"
+        ])
+        
+        # Set evaluation mode based on user's choice
+        if user_ai_choice.startswith("Advanced"):
+            st.session_state["eval_mode"] = "Advanced"
+        else:
+            st.session_state["eval_mode"] = "Standard"
+            
         llm_provider = "Groq (Cloud Fast)"
         groq_api_key = st.secrets.get("GROQ_API_KEY", "") if hasattr(st, "secrets") else ""
         st.session_state["groq_api_key"] = groq_api_key
@@ -614,14 +626,16 @@ with st.sidebar:
         llm_model = "llama-3.1-8b-instant"
         ollama_url = ""
     
-    st.markdown("---")
-    st.subheader("⚙️ Evaluation Mode")
-    eval_mode = st.radio(
-        "Select Agent Behavior",
-        ["Standard (Fast & Low Token)", "Advanced (Agentic Python Reasoning)"],
-        help="Standard mode uses pure LLM reasoning. Advanced mode writes and executes Python code for 100% mathematical accuracy."
-    )
-    st.session_state["eval_mode"] = eval_mode
+    # Only show the explicit radio button to Admins
+    if st.session_state.get("user_mode") == "admin":
+        st.markdown("---")
+        st.subheader("⚙️ Evaluation Mode")
+        eval_mode = st.radio(
+            "Select Agent Behavior",
+            ["Standard (Fast & Low Token)", "Advanced (Agentic Python Reasoning)"],
+            help="Standard mode uses pure LLM reasoning. Advanced mode writes and executes Python code for 100% mathematical accuracy."
+        )
+        st.session_state["eval_mode"] = eval_mode
     
     st.markdown("---")
     # Rule source selection
