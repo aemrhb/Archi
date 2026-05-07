@@ -1640,15 +1640,35 @@ Answer the user's question directly and concisely without sounding robotic. Refe
                 }
                 
                 try:
-                    res = requests.post(f"{ollama_url}/api/chat", json=payload)
-                    if res.status_code == 200:
-                        full_response = res.json().get("message", {}).get("content", "Error: No content returned")
-                        message_placeholder.markdown(full_response)
-                        st.session_state.messages.append({"role": "assistant", "content": full_response})
+                    if st.session_state.get('llm_provider') == "Groq (Cloud Fast)":
+                        headers = {
+                            "Authorization": f"Bearer {st.session_state.get('groq_api_key', '')}",
+                            "Content-Type": "application/json"
+                        }
+                        res = requests.post(
+                            "https://api.groq.com/openai/v1/chat/completions",
+                            headers=headers,
+                            json={"model": llm_model, "messages": messages, "temperature": 0.3},
+                            timeout=60
+                        )
+                        if res.status_code == 200:
+                            full_response = res.json()['choices'][0]['message']['content']
+                            message_placeholder.markdown(full_response)
+                            st.session_state.messages.append({"role": "assistant", "content": full_response})
+                        else:
+                            error_msg = f"Groq API Error {res.status_code}: {res.text}"
+                            message_placeholder.error(error_msg)
+                            st.session_state.messages.append({"role": "assistant", "content": error_msg})
                     else:
-                        error_msg = f"API Error {res.status_code}: {res.text}"
-                        message_placeholder.error(error_msg)
-                        st.session_state.messages.append({"role": "assistant", "content": error_msg})
+                        res = requests.post(f"{ollama_url}/api/chat", json=payload)
+                        if res.status_code == 200:
+                            full_response = res.json().get("message", {}).get("content", "Error: No content returned")
+                            message_placeholder.markdown(full_response)
+                            st.session_state.messages.append({"role": "assistant", "content": full_response})
+                        else:
+                            error_msg = f"API Error {res.status_code}: {res.text}"
+                            message_placeholder.error(error_msg)
+                            st.session_state.messages.append({"role": "assistant", "content": error_msg})
                 except Exception as e:
                     error_msg = f"Connection Error: {e}"
                     message_placeholder.error(error_msg)
