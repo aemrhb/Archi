@@ -299,7 +299,9 @@ def agentic_evaluate_compliance(rules_text, elements_df, element_type, llm_model
     provider = st.session_state.get('llm_provider', 'Ollama (Local)')
     columns_list = elements_df.columns.tolist()
     
-    system_prompt = f"""You are an expert Building Code Compliance Agent.
+    pdf_language = st.session_state.get('pdf_language', 'German')
+    
+    system_prompt = f"""You are an expert Building Code Compliance Agent. The rulebook text is written in {pdf_language}.
 Your task is to read the building regulations and evaluate if the BIM elements comply.
 
 AVAILABLE RULES EXTRACTED FROM PDF:
@@ -658,6 +660,14 @@ with st.sidebar:
             if not PDF_AVAILABLE:
                 st.error("⚠️ PDF processing not available. Install with: pip install pdfplumber")
             else:
+                pdf_language = st.selectbox(
+                    "Rule Book Language", 
+                    ["German", "English", "French", "Spanish", "Dutch", "Italian"],
+                    index=0,
+                    help="Select the language of the uploaded PDF to optimize AI retrieval."
+                )
+                st.session_state["pdf_language"] = pdf_language
+                
                 uploaded_pdf = st.file_uploader(
                     "Upload Rule Book PDF",
                     type=["pdf"],
@@ -1412,12 +1422,16 @@ if uploaded_file is not None:
                             # --- AGENTIC QUERY GENERATION ---
                             if f"rag_query_{element_type}" not in st.session_state:
                                 with st.spinner("Agent is generating optimal search query..."):
-                                    query_prompt = f"I need to search a building code document for regulations applying to the BIM element type '{element_type}'. Please generate a highly enriched search query string containing architectural synonyms and regulatory concepts that apply to this element. Provide ONLY the search string, nothing else."
+                                    pdf_lang = st.session_state.get('pdf_language', 'German')
+                                    query_prompt = f"I need to search a {pdf_lang} building code document for regulations applying to the BIM element type '{element_type}'. Please generate a highly enriched search query string in {pdf_lang} containing architectural synonyms and regulatory concepts that apply to this element. Provide ONLY the search string in {pdf_lang}, nothing else."
                                     generated_query = call_local_llm(query_prompt, llm_model, ollama_url).strip()
                                     
                                     # Fallback if LLM fails
                                     if not generated_query or len(generated_query) < 5:
-                                        generated_query = f"Anforderungen, Abmessungen, Maße, Regeln, Brandschutz für {element_type.replace('Ifc', '')}"
+                                        if pdf_lang == "German":
+                                            generated_query = f"Anforderungen, Abmessungen, Maße, Regeln, Brandschutz für {element_type.replace('Ifc', '')}"
+                                        else:
+                                            generated_query = f"Requirements, dimensions, rules, fire safety for {element_type.replace('Ifc', '')}"
                                         
                                     st.session_state[f"rag_query_{element_type}"] = generated_query
                             
@@ -1614,7 +1628,8 @@ Respond with a beautifully formatted Markdown compliance report."""
                 # 3. Build the sophisticated system prompt
                 import requests
                 
-                system_prompt = f"""You are a German Building Code Expert & BIM Consultant.
+                pdf_lang = st.session_state.get('pdf_language', 'German')
+                system_prompt = f"""You are a {pdf_lang} Building Code Expert & BIM Consultant.
 You are helping the user understand their building model compliance according to the rule book.
 
 --- CONTEXT 1: CURRENT BIM EVALUATION REPORTS ---
